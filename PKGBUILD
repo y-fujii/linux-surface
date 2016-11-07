@@ -4,8 +4,8 @@
 
 pkgbase=linux-surface       # Build stock -ARCH kernel
 #pkgbase=linux-custom       # Build kernel with a different name
-_srcname=linux-4.9-rc3
-pkgver=4.9rc3
+_srcname=linux-4.9-rc4
+pkgver=4.9rc4
 pkgrel=1
 arch=('i686' 'x86_64')
 url="http://www.kernel.org/"
