@@ -2,10 +2,9 @@
 # Maintainer: Tobias Powalowski <tpowa@archlinux.org>
 # Maintainer: Thomas Baechler <thomas@archlinux.org>
 
-pkgbase=linux-surface       # Build stock -ARCH kernel
-#pkgbase=linux-custom       # Build kernel with a different name
-_srcname=linux-4.9-rc4
-pkgver=4.9rc4
+pkgbase=linux-surface       # Build kernel with a different name
+_srcname=linux-4.9-rc5
+pkgver=4.9rc5
 pkgrel=1
 arch=('i686' 'x86_64')
 url="http://www.kernel.org/"
@@ -20,6 +19,7 @@ source=("https://cdn.kernel.org/pub/linux/kernel/v4.x/testing/${_srcname}.tar.xz
         'linux.preset'
         'change-default-console-loglevel.patch'
         'multitouch.patch'
+        'mwifiex.patch'
         )
 
 sha256sums=('SKIP'
@@ -28,6 +28,7 @@ sha256sums=('SKIP'
             'SKIP'
             'f0d90e756f14533ee67afda280500511a62465b4f76adcc5effa95a40045179c'
             '1256b241cd477b265a3c2d64bdc19ffe3c9bbcee82ea3994c590c2c76e767d99'
+            'SKIP'
             'SKIP'
             )
 validpgpkeys=(
@@ -53,6 +54,7 @@ prepare() {
 
   # apply surface patches.
   patch -p1 -i "${srcdir}/multitouch.patch"
+  patch -p1 -i "${srcdir}/mwifiex.patch"
 
   if [ "${CARCH}" = "x86_64" ]; then
     cat "${srcdir}/config.x86_64" > ./.config
