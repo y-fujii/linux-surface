@@ -1,0 +1,253 @@
+diff --git a/drivers/net/wireless/marvell/mwifiex/README b/drivers/net/wireless/marvell/mwifiex/README
+index 24e649b..588fcbe 100644
+--- a/drivers/net/wireless/marvell/mwifiex/README
++++ b/drivers/net/wireless/marvell/mwifiex/README
+@@ -180,6 +180,29 @@ regrdwr
+ 		echo "1 0xa060 0x12" > regrdwr      : Write the MAC register
+ 		echo "1 0xa794 0x80000000" > regrdwr
+ 		                                    : Write 0x80000000 to MAC register
++
++memrw
++	This command is used to read/write the firmware memory.
++
++	Usage:
++		1) For reading firmware memory location.
++			echo r <address> 0 > /sys/kernel/debug/mwifiex/mlan0/memrw
++			cat /sys/kernel/debug/mwifiex/mlan0/memrw
++		2) For writing value to firmware memory location.
++			echo w <address> [value] > /sys/kernel/debug/mwifiex/mlan0/memrw
++
++	where the parameters are,
++		<address>:  memory address
++		[value]:    value to be written
++
++	Examples:
++		echo r 0x4cf70 0 > /sys/kernel/debug/mwifiex/mlan0/memrw
++		cat /sys/kernel/debug/mwifiex/mlan0/memrw
++						: Read memory address 0x4cf70
++		iwpriv mlan0 memrdwr -0x7fff6000 -0x40000000
++		echo w 0x8000a000 0xc0000000 > /sys/kernel/debug/mwifiex/mlan0/memrw
++						: Write 0xc0000000 to memory address 0x8000a000
++
+ rdeeprom
+ 	This command is used to read the EEPROM contents of the card.
+ 
+diff --git a/drivers/net/wireless/marvell/mwifiex/cfg80211.c b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+index 39ce76a..c26469a 100644
+--- a/drivers/net/wireless/marvell/mwifiex/cfg80211.c
++++ b/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+@@ -1203,6 +1203,12 @@ mwifiex_cfg80211_change_virtual_intf(struct wiphy *wiphy,
+ 			priv->adapter->curr_iface_comb.p2p_intf--;
+ 			priv->adapter->curr_iface_comb.sta_intf++;
+ 			dev->ieee80211_ptr->iftype = type;
++			if (mwifiex_deinit_priv_params(priv))
++				return -1;
++			if (mwifiex_init_new_priv_params(priv, dev, type))
++				return -1;
++			if (mwifiex_sta_init_cmd(priv, false, false))
++				return -1;
+ 			break;
+ 		case NL80211_IFTYPE_ADHOC:
+ 			if (mwifiex_cfg80211_deinit_p2p(priv))
+@@ -3016,6 +3022,8 @@ struct wireless_dev *mwifiex_add_virtual_intf(struct wiphy *wiphy,
+ 		priv->netdev = NULL;
+ 		memset(&priv->wdev, 0, sizeof(priv->wdev));
+ 		priv->wdev.iftype = NL80211_IFTYPE_UNSPECIFIED;
++		destroy_workqueue(priv->dfs_cac_workqueue);
++		priv->dfs_cac_workqueue = NULL;
+ 		return ERR_PTR(-ENOMEM);
+ 	}
+ 
+@@ -3070,8 +3078,10 @@ int mwifiex_del_virtual_intf(struct wiphy *wiphy, struct wireless_dev *wdev)
+ 
+ 	mwifiex_stop_net_dev_queue(priv->netdev, adapter);
+ 
+-	skb_queue_walk_safe(&priv->bypass_txq, skb, tmp)
++	skb_queue_walk_safe(&priv->bypass_txq, skb, tmp) {
++		skb_unlink(skb, &priv->bypass_txq);
+ 		mwifiex_write_data_complete(priv->adapter, skb, 0, -1);
++	}
+ 
+ 	if (netif_carrier_ok(priv->netdev))
+ 		netif_carrier_off(priv->netdev);
+diff --git a/drivers/net/wireless/marvell/mwifiex/main.h b/drivers/net/wireless/marvell/mwifiex/main.h
+index 26df28f..d61fe3a 100644
+--- a/drivers/net/wireless/marvell/mwifiex/main.h
++++ b/drivers/net/wireless/marvell/mwifiex/main.h
+@@ -315,6 +315,7 @@ struct mwifiex_tid_tbl {
+ #define WMM_HIGHEST_PRIORITY		7
+ #define HIGH_PRIO_TID				7
+ #define LOW_PRIO_TID				0
++#define NO_PKT_PRIO_TID				-1
+ #define MWIFIEX_WMM_DRV_DELAY_MAX 510
+ 
+ struct mwifiex_wmm_desc {
+diff --git a/drivers/net/wireless/marvell/mwifiex/pcie.c b/drivers/net/wireless/marvell/mwifiex/pcie.c
+index 3c3c4f1..063c707 100644
+--- a/drivers/net/wireless/marvell/mwifiex/pcie.c
++++ b/drivers/net/wireless/marvell/mwifiex/pcie.c
+@@ -101,7 +101,6 @@ static int mwifiex_pcie_suspend(struct device *dev)
+ {
+ 	struct mwifiex_adapter *adapter;
+ 	struct pcie_service_card *card;
+-	int hs_actived;
+ 	struct pci_dev *pdev = to_pci_dev(dev);
+ 
+ 	if (pdev) {
+@@ -117,7 +116,15 @@ static int mwifiex_pcie_suspend(struct device *dev)
+ 
+ 	adapter = card->adapter;
+ 
+-	hs_actived = mwifiex_enable_hs(adapter);
++	/* Enable the Host Sleep */
++	if (!mwifiex_enable_hs(adapter)) {
++		mwifiex_dbg(adapter, ERROR,
++			    "cmd: failed to suspend\n");
++		adapter->hs_enabling = false;
++		return -EFAULT;
++	}
++
++	flush_workqueue(adapter->workqueue);
+ 
+ 	/* Indicate device suspended */
+ 	adapter->is_suspended = true;
+@@ -1669,9 +1676,6 @@ static int mwifiex_pcie_process_cmd_complete(struct mwifiex_adapter *adapter)
+ 
+ 	if (!adapter->curr_cmd) {
+ 		if (adapter->ps_state == PS_STATE_SLEEP_CFM) {
+-			mwifiex_process_sleep_confirm_resp(adapter, skb->data,
+-							   skb->len);
+-			mwifiex_pcie_enable_host_int(adapter);
+ 			if (mwifiex_write_reg(adapter,
+ 					      PCIE_CPU_INT_EVENT,
+ 					      CPU_INTR_SLEEP_CFM_DONE)) {
+@@ -1684,6 +1688,9 @@ static int mwifiex_pcie_process_cmd_complete(struct mwifiex_adapter *adapter)
+ 			while (reg->sleep_cookie && (count++ < 10) &&
+ 			       mwifiex_pcie_ok_to_access_hw(adapter))
+ 				usleep_range(50, 60);
++			mwifiex_pcie_enable_host_int(adapter);
++			mwifiex_process_sleep_confirm_resp(adapter, skb->data,
++							   skb->len);
+ 		} else {
+ 			mwifiex_dbg(adapter, ERROR,
+ 				    "There is no command but got cmdrsp\n");
+@@ -2322,6 +2329,8 @@ static int mwifiex_process_pcie_int(struct mwifiex_adapter *adapter)
+ 			ret = mwifiex_pcie_process_cmd_complete(adapter);
+ 			if (ret)
+ 				return ret;
++			if (adapter->hs_activated)
++				return ret;
+ 		}
+ 
+ 		if (card->msi_enable) {
+diff --git a/drivers/net/wireless/marvell/mwifiex/uap_cmd.c b/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
+index a7e9f54..35d8636 100644
+--- a/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
++++ b/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
+@@ -404,7 +404,7 @@ mwifiex_set_wmm_params(struct mwifiex_private *priv,
+ 		       struct cfg80211_ap_settings *params)
+ {
+ 	const u8 *vendor_ie;
+-	struct ieee_types_header *wmm_ie;
++	const u8 *wmm_ie;
+ 	u8 wmm_oui[] = {0x00, 0x50, 0xf2, 0x02};
+ 
+ 	vendor_ie = cfg80211_find_vendor_ie(WLAN_OUI_MICROSOFT,
+@@ -412,9 +412,9 @@ mwifiex_set_wmm_params(struct mwifiex_private *priv,
+ 					    params->beacon.tail,
+ 					    params->beacon.tail_len);
+ 	if (vendor_ie) {
+-		wmm_ie = (struct ieee_types_header *)vendor_ie;
+-		memcpy(&bss_cfg->wmm_info, wmm_ie + 1,
+-		       sizeof(bss_cfg->wmm_info));
++		wmm_ie = vendor_ie;
++		memcpy(&bss_cfg->wmm_info, wmm_ie +
++		       sizeof(struct ieee_types_header), *(wmm_ie + 1));
+ 		priv->wmm_enabled = 1;
+ 	} else {
+ 		memset(&bss_cfg->wmm_info, 0, sizeof(bss_cfg->wmm_info));
+diff --git a/drivers/net/wireless/marvell/mwifiex/wmm.c b/drivers/net/wireless/marvell/mwifiex/wmm.c
+index 0eb2465..28c2f6f 100644
+--- a/drivers/net/wireless/marvell/mwifiex/wmm.c
++++ b/drivers/net/wireless/marvell/mwifiex/wmm.c
+@@ -503,8 +503,10 @@ mwifiex_wmm_del_pkts_in_ralist_node(struct mwifiex_private *priv,
+ 	struct mwifiex_adapter *adapter = priv->adapter;
+ 	struct sk_buff *skb, *tmp;
+ 
+-	skb_queue_walk_safe(&ra_list->skb_head, skb, tmp)
++	skb_queue_walk_safe(&ra_list->skb_head, skb, tmp) {
++		skb_unlink(skb, &ra_list->skb_head);
+ 		mwifiex_write_data_complete(adapter, skb, 0, -1);
++	}
+ }
+ 
+ /*
+@@ -600,11 +602,15 @@ mwifiex_clean_txrx(struct mwifiex_private *priv)
+ 		priv->adapter->if_ops.clean_pcie_ring(priv->adapter);
+ 	spin_unlock_irqrestore(&priv->wmm.ra_list_spinlock, flags);
+ 
+-	skb_queue_walk_safe(&priv->tdls_txq, skb, tmp)
++	skb_queue_walk_safe(&priv->tdls_txq, skb, tmp) {
++		skb_unlink(skb, &priv->tdls_txq);
+ 		mwifiex_write_data_complete(priv->adapter, skb, 0, -1);
++	}
+ 
+-	skb_queue_walk_safe(&priv->bypass_txq, skb, tmp)
++	skb_queue_walk_safe(&priv->bypass_txq, skb, tmp) {
++		skb_unlink(skb, &priv->bypass_txq);
+ 		mwifiex_write_data_complete(priv->adapter, skb, 0, -1);
++	}
+ 	atomic_set(&priv->adapter->bypass_tx_pending, 0);
+ 
+ 	idr_for_each(&priv->ack_status_frames, mwifiex_free_ack_frame, NULL);
+@@ -1099,6 +1105,7 @@ mwifiex_wmm_get_highest_priolist_ptr(struct mwifiex_adapter *adapter,
+ 				    &adapter->bss_prio_tbl[j].bss_prio_head,
+ 				    list) {
+ 
++try_again:
+ 			priv_tmp = adapter->bss_prio_tbl[j].bss_prio_cur->priv;
+ 
+ 			if (((priv_tmp->bss_mode != NL80211_IFTYPE_ADHOC) &&
+@@ -1134,8 +1141,18 @@ mwifiex_wmm_get_highest_priolist_ptr(struct mwifiex_adapter *adapter,
+ 						       ra_list_spinlock,
+ 						       flags_ra);
+ 			}
+-		}
+ 
++			if (atomic_read(&priv_tmp->wmm.tx_pkts_queued) != 0) {
++				atomic_set(&priv_tmp->wmm.highest_queued_prio,
++					   HIGH_PRIO_TID);
++				/* Iterate current private once more, since
++				 * there still exist packets in data queue
++				 */
++				goto try_again;
++			} else
++				atomic_set(&priv_tmp->wmm.highest_queued_prio,
++					   NO_PKT_PRIO_TID);
++		}
+ 	}
+ 
+ 	return NULL;
+@@ -1328,9 +1345,11 @@ mwifiex_send_processed_packet(struct mwifiex_private *priv,
+ 	skb = skb_dequeue(&ptr->skb_head);
+ 
+ 	if (adapter->data_sent || adapter->tx_lock_flag) {
++		ptr->total_pkt_count--;
+ 		spin_unlock_irqrestore(&priv->wmm.ra_list_spinlock,
+ 				       ra_list_flags);
+ 		skb_queue_tail(&adapter->tx_data_q, skb);
++		atomic_dec(&priv->wmm.tx_pkts_queued);
+ 		atomic_inc(&adapter->tx_queued);
+ 		return;
+ 	}
+@@ -1388,6 +1407,10 @@ mwifiex_send_processed_packet(struct mwifiex_private *priv,
+ 	if (ret != -EBUSY) {
+ 		mwifiex_rotate_priolists(priv, ptr, ptr_index);
+ 		atomic_dec(&priv->wmm.tx_pkts_queued);
++		spin_lock_irqsave(&priv->wmm.ra_list_spinlock, ra_list_flags);
++		ptr->total_pkt_count--;
++		spin_unlock_irqrestore(&priv->wmm.ra_list_spinlock,
++				       ra_list_flags);
+ 	}
+ }
+ 
