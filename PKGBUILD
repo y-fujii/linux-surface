@@ -57,7 +57,7 @@ prepare() {
 
   # apply surface patches.
   patch -p1 -i "${srcdir}/multitouch.patch"
-  #patch -p1 -i "${srcdir}/mwifiex.patch"
+  patch -p1 -i "${srcdir}/mwifiex.patch"
 
   if [ "${CARCH}" = "x86_64" ]; then
     cat "${srcdir}/config.x86_64" > ./.config
