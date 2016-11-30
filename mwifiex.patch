@@ -1,6 +1,6 @@
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cfg80211.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cfg80211.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2016-11-16 04:01:36.549107326 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/cfg80211.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cfg80211.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cfg80211.c	2016-11-29 23:55:28.712051593 +0000
 @@ -1203,6 +1203,12 @@
  			priv->adapter->curr_iface_comb.p2p_intf--;
  			priv->adapter->curr_iface_comb.sta_intf++;
@@ -14,7 +14,24 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cfg80211.c wireless
  			break;
  		case NL80211_IFTYPE_ADHOC:
  			if (mwifiex_cfg80211_deinit_p2p(priv))
-@@ -3016,6 +3022,8 @@
+@@ -2137,6 +2143,16 @@
+ 	ret = mwifiex_set_encode(priv, NULL, NULL, 0, 0, NULL, 1);
+ 
+ 	if (mode == NL80211_IFTYPE_ADHOC) {
++		u16 enable = true;
++
++		/* set ibss coalescing_status */
++		ret = mwifiex_send_cmd(
++				priv,
++				HostCmd_CMD_802_11_IBSS_COALESCING_STATUS,
++				HostCmd_ACT_GEN_SET, 0, &enable, true);
++		if (ret)
++			return ret;
++
+ 		/* "privacy" is set only for ad-hoc mode */
+ 		if (privacy) {
+ 			/*
+@@ -3016,6 +3032,8 @@
  		priv->netdev = NULL;
  		memset(&priv->wdev, 0, sizeof(priv->wdev));
  		priv->wdev.iftype = NL80211_IFTYPE_UNSPECIFIED;
@@ -23,7 +40,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cfg80211.c wireless
  		return ERR_PTR(-ENOMEM);
  	}
  
-@@ -3070,8 +3078,10 @@
+@@ -3070,8 +3088,10 @@
  
  	mwifiex_stop_net_dev_queue(priv->netdev, adapter);
  
@@ -35,8 +52,22 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cfg80211.c wireless
  
  	if (netif_carrier_ok(priv->netdev))
  		netif_carrier_off(priv->netdev);
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cmdevt.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cmdevt.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cmdevt.c	2016-11-20 21:52:19.000000000 +0000
+@@ -3970,13 +3990,11 @@
+ 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(wdev->netdev);
+ 	struct mwifiex_ds_misc_cmd *hostcmd;
+ 	struct nlattr *tb[MWIFIEX_TM_ATTR_MAX + 1];
+-	struct mwifiex_adapter *adapter;
+ 	struct sk_buff *skb;
+ 	int err;
+ 
+ 	if (!priv)
+ 		return -EINVAL;
+-	adapter = priv->adapter;
+ 
+ 	err = nla_parse(tb, MWIFIEX_TM_ATTR_MAX, data, len,
+ 			mwifiex_tm_policy);
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/cmdevt.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cmdevt.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/cmdevt.c	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/cmdevt.c	2016-11-21 02:49:23.733927458 +0000
 @@ -1118,13 +1118,14 @@
  void
@@ -55,9 +86,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/cmdevt.c wireless-d
  			    (adapter->curr_cmd) ? "C" : "",
  			    (IS_CARD_RX_RCVD(adapter)) ? "R" : "");
  }
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/fw.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/fw.h
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/fw.h	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/fw.h	2016-11-21 02:49:23.733927458 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/fw.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/fw.h
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/fw.h	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/fw.h	2016-11-28 01:49:48.628217863 +0000
 @@ -181,6 +181,7 @@
  #define TLV_TYPE_COALESCE_RULE      (PROPRIETARY_TLV_BASE_ID + 154)
  #define TLV_TYPE_KEY_PARAM_V2       (PROPRIETARY_TLV_BASE_ID + 156)
@@ -66,7 +97,15 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/fw.h wireless-drive
  #define TLV_TYPE_MULTI_CHAN_INFO    (PROPRIETARY_TLV_BASE_ID + 183)
  #define TLV_TYPE_MC_GROUP_INFO      (PROPRIETARY_TLV_BASE_ID + 184)
  #define TLV_TYPE_TDLS_IDLE_TIMEOUT  (PROPRIETARY_TLV_BASE_ID + 194)
-@@ -986,6 +987,15 @@
+@@ -218,6 +219,7 @@
+ #define ISSUPP_TDLS_ENABLED(FwCapInfo) (FwCapInfo & BIT(14))
+ #define ISSUPP_DRCS_ENABLED(FwCapInfo) (FwCapInfo & BIT(15))
+ #define ISSUPP_SDIO_SPA_ENABLED(FwCapInfo) (FwCapInfo & BIT(16))
++#define ISSUPP_ADHOC_ENABLED(FwCapInfo) (FwCapInfo & BIT(25))
+ 
+ #define MWIFIEX_DEF_HT_CAP	(IEEE80211_HT_CAP_DSSSCCK40 | \
+ 				 (1 << IEEE80211_HT_CAP_RX_STBC_SHIFT) | \
+@@ -986,6 +988,15 @@
  	__le16 delay_to_ps;
  };
  
@@ -82,8 +121,8 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/fw.h wireless-drive
  #define BITMAP_AUTO_DS         0x01
  #define BITMAP_STA_PS          0x10
  
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/init.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/init.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/init.c	2016-11-20 21:52:19.000000000 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/init.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/init.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/init.c	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/init.c	2016-11-21 02:49:23.733927458 +0000
 @@ -270,6 +270,7 @@
  	adapter->adhoc_11n_enabled = false;
@@ -93,9 +132,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/init.c wireless-dri
  
  	sleep_cfm_buf = (struct mwifiex_opt_sleep_confirm *)
  					adapter->sleep_cfm->data;
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.c	2016-11-21 02:49:23.733927458 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/main.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/main.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.c	2016-11-29 23:55:28.712051593 +0000
 @@ -308,6 +308,9 @@
  			/* We have tried to wakeup the card already */
  			if (adapter->pm_wakeup_fw_try)
@@ -119,8 +158,11 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  
  		/* * The ps_state may have been changed during processing of
  		 * Sleep Request event.
-@@ -520,9 +521,9 @@
- 	struct mwifiex_private *priv;
+@@ -517,12 +518,11 @@
+ {
+ 	int ret;
+ 	char fmt[64];
+-	struct mwifiex_private *priv;
  	struct mwifiex_adapter *adapter = context;
  	struct mwifiex_fw_image fw;
 -	struct semaphore *sem = adapter->card_sem;
@@ -130,7 +172,16 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  
  	if (!firmware) {
  		mwifiex_dbg(adapter, ERROR,
-@@ -669,7 +670,8 @@
+@@ -575,8 +575,6 @@
+ 			goto err_init_fw;
+ 	}
+ 
+-	priv = adapter->priv[MWIFIEX_BSS_ROLE_STA];
+-
+ 	if (!adapter->wiphy) {
+ 		if (mwifiex_register_cfg80211(adapter)) {
+ 			mwifiex_dbg(adapter, ERROR,
+@@ -669,7 +667,8 @@
  	}
  	if (init_failed)
  		mwifiex_free_adapter(adapter);
@@ -140,7 +191,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	return;
  }
  
-@@ -1364,7 +1366,7 @@
+@@ -1364,7 +1363,7 @@
   * code is extracted from mwifiex_remove_card()
   */
  static int
@@ -149,7 +200,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  {
  	struct mwifiex_private *priv;
  	int i;
-@@ -1372,8 +1374,9 @@
+@@ -1372,8 +1371,9 @@
  	if (!adapter)
  		goto exit_return;
  
@@ -161,7 +212,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  
  	priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
  	mwifiex_deauthenticate(priv, NULL);
-@@ -1430,8 +1433,6 @@
+@@ -1430,8 +1430,6 @@
  		rtnl_unlock();
  	}
  
@@ -170,7 +221,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	mwifiex_dbg(adapter, INFO, "%s, successful\n", __func__);
  exit_return:
  	return 0;
-@@ -1441,21 +1442,18 @@
+@@ -1441,21 +1439,18 @@
   * code is extracted from mwifiex_add_card()
   */
  static int
@@ -194,7 +245,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  
  	adapter->hw_status = MWIFIEX_HW_STATUS_INITIALIZING;
  	adapter->surprise_removed = false;
-@@ -1506,7 +1504,8 @@
+@@ -1506,7 +1501,8 @@
  	}
  	strcpy(adapter->fw_name, fw_name);
  	mwifiex_dbg(adapter, INFO, "%s, successful\n", __func__);
@@ -204,7 +255,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	return 0;
  
  err_init_fw:
-@@ -1526,8 +1525,7 @@
+@@ -1526,8 +1522,7 @@
  err_kmalloc:
  	mwifiex_terminate_workqueue(adapter);
  	adapter->surprise_removed = true;
@@ -214,7 +265,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	mwifiex_dbg(adapter, INFO, "%s, error\n", __func__);
  
  	return -1;
-@@ -1542,16 +1540,67 @@
+@@ -1542,16 +1537,67 @@
  	struct mwifiex_if_ops if_ops;
  
  	if (!prepare) {
@@ -284,7 +335,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  /*
   * This function adds the card.
   *
-@@ -1566,21 +1615,22 @@
+@@ -1566,21 +1612,22 @@
   *      - Add logical interfaces
   */
  int
@@ -313,7 +364,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  
  	adapter->hw_status = MWIFIEX_HW_STATUS_INITIALIZING;
  	adapter->surprise_removed = false;
-@@ -1649,9 +1699,7 @@
+@@ -1649,9 +1696,7 @@
  	mwifiex_free_adapter(adapter);
  
  err_init_sw:
@@ -323,7 +374,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	return -1;
  }
  EXPORT_SYMBOL_GPL(mwifiex_add_card);
-@@ -1667,14 +1715,11 @@
+@@ -1667,14 +1712,11 @@
   *      - Unregister the device
   *      - Free the adapter structure
   */
@@ -339,7 +390,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	if (!adapter)
  		goto exit_remove;
  
-@@ -1744,8 +1789,6 @@
+@@ -1744,8 +1786,6 @@
  	mwifiex_free_adapter(adapter);
  
  exit_remove:
@@ -348,9 +399,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.c wireless-dri
  	return 0;
  }
  EXPORT_SYMBOL_GPL(mwifiex_remove_card);
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.h
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.h	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.h	2016-11-21 02:49:23.737260774 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/main.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.h
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/main.h	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/main.h	2016-11-28 01:49:48.628217863 +0000
 @@ -20,6 +20,7 @@
  #ifndef _MWIFIEX_MAIN_H_
  #define _MWIFIEX_MAIN_H_
@@ -398,7 +449,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.h wireless-dri
  };
  
  void mwifiex_process_tx_queue(struct mwifiex_adapter *adapter);
-@@ -1409,10 +1419,34 @@
+@@ -1409,10 +1419,39 @@
  	return false;
  }
  
@@ -407,8 +458,13 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.h wireless-dri
 +{
 +	if (adapter->irq_wakeup >= 0) {
 +		disable_irq_wake(adapter->irq_wakeup);
-+		if (!adapter->wake_by_wifi)
-+			disable_irq(adapter->irq_wakeup);
++		disable_irq(adapter->irq_wakeup);
++		if (adapter->wake_by_wifi)
++			/* Undo our disable, since interrupt handler already
++			 * did this.
++			 */
++			enable_irq(adapter->irq_wakeup);
++
 +	}
 +}
 +
@@ -435,9 +491,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/main.h wireless-dri
  
  void mwifiex_get_version(struct mwifiex_adapter *adapter, char *version,
  			 int maxlen);
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.c	2016-11-21 02:49:23.737260774 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/pcie.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.c	2016-11-29 23:55:28.712051593 +0000
 @@ -35,7 +35,21 @@
  
  static struct mwifiex_if_ops pcie_ops;
@@ -461,7 +517,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  
  static int
  mwifiex_map_pci_memory(struct mwifiex_adapter *adapter, struct sk_buff *skb,
-@@ -101,23 +115,30 @@
+@@ -101,23 +115,31 @@
  {
  	struct mwifiex_adapter *adapter;
  	struct pcie_service_card *card;
@@ -489,21 +545,22 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  
 -	adapter = card->adapter;
 +	mwifiex_enable_wake(adapter);
- 
--	hs_actived = mwifiex_enable_hs(adapter);
++
 +	/* Enable the Host Sleep */
 +	if (!mwifiex_enable_hs(adapter)) {
 +		mwifiex_dbg(adapter, ERROR,
 +			    "cmd: failed to suspend\n");
 +		adapter->hs_enabling = false;
++		mwifiex_disable_wake(adapter);
 +		return -EFAULT;
 +	}
-+
+ 
+-	hs_actived = mwifiex_enable_hs(adapter);
 +	flush_workqueue(adapter->workqueue);
  
  	/* Indicate device suspended */
  	adapter->is_suspended = true;
-@@ -140,14 +161,10 @@
+@@ -140,14 +162,10 @@
  	struct pcie_service_card *card;
  	struct pci_dev *pdev = to_pci_dev(dev);
  
@@ -522,7 +579,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		return 0;
  	}
  
-@@ -163,6 +180,7 @@
+@@ -163,6 +181,7 @@
  
  	mwifiex_cancel_hs(mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_STA),
  			  MWIFIEX_ASYNC_CMD);
@@ -530,7 +587,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  
  	return 0;
  }
-@@ -178,14 +196,17 @@
+@@ -178,14 +197,17 @@
  					const struct pci_device_id *ent)
  {
  	struct pcie_service_card *card;
@@ -549,7 +606,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	card->dev = pdev;
  
  	if (ent->driver_data) {
-@@ -199,8 +220,15 @@
+@@ -199,8 +221,15 @@
  		card->pcie.can_ext_scan = data->can_ext_scan;
  	}
  
@@ -567,7 +624,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		pr_err("%s failed\n", __func__);
  		return -1;
  	}
-@@ -218,19 +246,14 @@
+@@ -218,19 +247,14 @@
  	struct mwifiex_private *priv;
  
  	card = pci_get_drvdata(pdev);
@@ -589,7 +646,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		mwifiex_deauthenticate_all(adapter);
  
  		priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
-@@ -240,7 +263,7 @@
+@@ -240,7 +264,7 @@
  		mwifiex_init_shutdown_fw(priv, MWIFIEX_FUNC_SHUTDOWN);
  	}
  
@@ -598,7 +655,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  }
  
  static void mwifiex_pcie_shutdown(struct pci_dev *pdev)
-@@ -483,6 +506,7 @@
+@@ -483,6 +507,7 @@
  		}
  	}
  
@@ -606,7 +663,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	return 0;
  }
  
-@@ -682,6 +706,7 @@
+@@ -682,6 +707,7 @@
  		card->tx_buf_list[i] = NULL;
  	}
  
@@ -614,7 +671,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	return;
  }
  
-@@ -1119,6 +1144,7 @@
+@@ -1119,6 +1145,7 @@
  							    -1);
  			else
  				mwifiex_write_data_complete(adapter, skb, 0, 0);
@@ -622,7 +679,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		}
  
  		card->tx_buf_list[wrdoneidx] = NULL;
-@@ -1211,6 +1237,7 @@
+@@ -1211,6 +1238,7 @@
  		wrindx = (card->txbd_wrptr & reg->tx_mask) >> reg->tx_start_ptr;
  		buf_pa = MWIFIEX_SKB_DMA_ADDR(skb);
  		card->tx_buf_list[wrindx] = skb;
@@ -630,7 +687,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  
  		if (reg->pfu_enabled) {
  			desc2 = card->txbd_ring[wrindx];
-@@ -1288,6 +1315,7 @@
+@@ -1288,6 +1316,7 @@
  done_unmap:
  	mwifiex_unmap_pci_memory(adapter, skb, PCI_DMA_TODEVICE);
  	card->tx_buf_list[wrindx] = NULL;
@@ -638,7 +695,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	if (reg->pfu_enabled)
  		memset(desc2, 0, sizeof(*desc2));
  	else
-@@ -1669,9 +1697,6 @@
+@@ -1669,9 +1698,6 @@
  
  	if (!adapter->curr_cmd) {
  		if (adapter->ps_state == PS_STATE_SLEEP_CFM) {
@@ -648,7 +705,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  			if (mwifiex_write_reg(adapter,
  					      PCIE_CPU_INT_EVENT,
  					      CPU_INTR_SLEEP_CFM_DONE)) {
-@@ -1684,6 +1709,9 @@
+@@ -1684,6 +1710,9 @@
  			while (reg->sleep_cookie && (count++ < 10) &&
  			       mwifiex_pcie_ok_to_access_hw(adapter))
  				usleep_range(50, 60);
@@ -658,7 +715,37 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		} else {
  			mwifiex_dbg(adapter, ERROR,
  				    "There is no command but got cmdrsp\n");
-@@ -2210,7 +2238,8 @@
+@@ -2022,7 +2051,7 @@
+ 		}
+ 
+ 		/* Wait for the command done interrupt */
+-		do {
++		for (tries = 0; tries < MAX_POLL_TRIES; tries++) {
+ 			if (mwifiex_read_reg(adapter, PCIE_CPU_INT_STATUS,
+ 					     &ireg_intr)) {
+ 				mwifiex_dbg(adapter, ERROR,
+@@ -2034,8 +2063,18 @@
+ 				ret = -1;
+ 				goto done;
+ 			}
+-		} while ((ireg_intr & CPU_INTR_DOOR_BELL) ==
+-			 CPU_INTR_DOOR_BELL);
++			if (!(ireg_intr & CPU_INTR_DOOR_BELL))
++				break;
++			usleep_range(10, 20);
++		}
++		if (ireg_intr & CPU_INTR_DOOR_BELL) {
++			mwifiex_dbg(adapter, ERROR, "%s: Card failed to ACK download\n",
++				    __func__);
++			mwifiex_unmap_pci_memory(adapter, skb,
++						 PCI_DMA_TODEVICE);
++			ret = -1;
++			goto done;
++		}
+ 
+ 		mwifiex_unmap_pci_memory(adapter, skb, PCI_DMA_TODEVICE);
+ 
+@@ -2210,7 +2249,8 @@
  	}
  
  	card = pci_get_drvdata(pdev);
@@ -668,7 +755,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		pr_err("info: %s: card=%p adapter=%p\n", __func__, card,
  		       card ? card->adapter : NULL);
  		goto exit;
-@@ -2322,6 +2351,8 @@
+@@ -2322,6 +2362,8 @@
  			ret = mwifiex_pcie_process_cmd_complete(adapter);
  			if (ret)
  				return ret;
@@ -677,7 +764,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  		}
  
  		if (card->msi_enable) {
-@@ -2806,7 +2837,6 @@
+@@ -2806,7 +2848,6 @@
  err_set_dma_mask:
  	pci_disable_device(pdev);
  err_enable_dev:
@@ -685,7 +772,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	return ret;
  }
  
-@@ -2840,9 +2870,7 @@
+@@ -2840,9 +2881,7 @@
  		pci_disable_device(pdev);
  		pci_release_region(pdev, 2);
  		pci_release_region(pdev, 0);
@@ -695,7 +782,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  }
  
  static int mwifiex_pcie_request_irq(struct mwifiex_adapter *adapter)
-@@ -2962,11 +2990,9 @@
+@@ -2962,11 +3001,9 @@
  static int mwifiex_register_dev(struct mwifiex_adapter *adapter)
  {
  	struct pcie_service_card *card = adapter->card;
@@ -707,7 +794,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  
  	if (mwifiex_pcie_request_irq(adapter))
  		return -1;
-@@ -2989,30 +3015,28 @@
+@@ -2989,30 +3026,28 @@
  static void mwifiex_unregister_dev(struct mwifiex_adapter *adapter)
  {
  	struct pcie_service_card *card = adapter->card;
@@ -756,7 +843,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  }
  
  /* This function initializes the PCI-E host memory space, WCB rings, etc.
-@@ -3095,18 +3119,14 @@
+@@ -3095,18 +3130,14 @@
  	adapter->seq_num = 0;
  	adapter->tx_buf_size = MWIFIEX_TX_DATA_BUF_SIZE_4K;
  
@@ -782,7 +869,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  }
  
  static struct mwifiex_if_ops pcie_ops = {
-@@ -3140,8 +3160,7 @@
+@@ -3140,8 +3171,7 @@
  /*
   * This function initializes the PCIE driver module.
   *
@@ -792,7 +879,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
   */
  static int mwifiex_pcie_init_module(void)
  {
-@@ -3149,8 +3168,6 @@
+@@ -3149,8 +3179,6 @@
  
  	pr_debug("Marvell PCIe Driver\n");
  
@@ -801,7 +888,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	/* Clear the flag in case user removes the card. */
  	user_rmmod = 0;
  
-@@ -3174,9 +3191,6 @@
+@@ -3174,9 +3202,6 @@
   */
  static void mwifiex_pcie_cleanup_module(void)
  {
@@ -811,8 +898,8 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.c wireless-dri
  	/* Set the flag as user is removing this module. */
  	user_rmmod = 1;
  
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.h
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.h	2016-11-20 21:52:19.000000000 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/pcie.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.h
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/pcie.h	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/pcie.h	2016-11-21 02:49:23.737260774 +0000
 @@ -22,6 +22,7 @@
  #ifndef	_MWIFIEX_PCIE_H
@@ -830,8 +917,8 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/pcie.h wireless-dri
  
  	u8 txbd_flush;
  	u32 txbd_wrptr;
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/README wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/README
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/README	2016-11-20 21:52:19.000000000 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/README wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/README
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/README	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/README	2016-11-16 04:01:36.545773995 +0000
 @@ -180,6 +180,29 @@
  		echo "1 0xa060 0x12" > regrdwr      : Write the MAC register
@@ -863,10 +950,35 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/README wireless-dri
  rdeeprom
  	This command is used to read the EEPROM contents of the card.
  
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/scan.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/scan.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/scan.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/scan.c	2016-11-21 02:49:23.737260774 +0000
-@@ -1671,6 +1671,10 @@
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/scan.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/scan.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/scan.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/scan.c	2016-11-29 23:55:28.712051593 +0000
+@@ -827,7 +827,6 @@
+ 	u32 num_probes;
+ 	u32 ssid_len;
+ 	u32 chan_idx;
+-	u32 chan_num;
+ 	u32 scan_type;
+ 	u16 scan_dur;
+ 	u8 channel;
+@@ -1105,13 +1104,12 @@
+ 			mwifiex_dbg(adapter, INFO,
+ 				    "info: Scan: Scanning current channel only\n");
+ 		}
+-		chan_num = chan_idx;
+ 	} else {
+ 		mwifiex_dbg(adapter, INFO,
+ 			    "info: Scan: Creating full region channel list\n");
+-		chan_num = mwifiex_scan_create_channel_list(priv, user_scan_in,
+-							    scan_chan_list,
+-							    *filtered_scan);
++		mwifiex_scan_create_channel_list(priv, user_scan_in,
++						 scan_chan_list,
++						 *filtered_scan);
+ 	}
+ 
+ }
+@@ -1671,6 +1669,10 @@
  	}
  
  done:
@@ -877,9 +989,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/scan.c wireless-dri
  	kfree(bss_desc);
  	return 0;
  }
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.c	2016-11-21 02:49:23.740594090 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/sdio.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.c	2016-11-29 23:55:28.715384929 +0000
 @@ -49,8 +49,6 @@
  static struct mwifiex_if_ops sdio_ops;
  static unsigned long iface_work_flags;
@@ -999,9 +1111,11 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  
  	return ret;
  }
-@@ -233,15 +188,10 @@
+@@ -231,17 +186,10 @@
+ 	struct sdio_func *func = dev_to_sdio_func(dev);
+ 	struct sdio_mmc_card *card;
  	struct mwifiex_adapter *adapter;
- 	mmc_pm_flag_t pm_flag = 0;
+-	mmc_pm_flag_t pm_flag = 0;
  
 -	if (func) {
 -		pm_flag = sdio_get_host_pm_caps(func);
@@ -1012,14 +1126,13 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
 -		}
 -	} else {
 -		pr_err("resume: sdio_func is not specified\n");
-+	pm_flag = sdio_get_host_pm_caps(func);
 +	card = sdio_get_drvdata(func);
 +	if (!card || !card->adapter) {
 +		dev_err(dev, "resume: invalid card or adapter\n");
  		return 0;
  	}
  
-@@ -259,12 +209,7 @@
+@@ -259,12 +207,7 @@
  	mwifiex_cancel_hs(mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_STA),
  			  MWIFIEX_SYNC_CMD);
  
@@ -1033,7 +1146,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  
  	return 0;
  }
-@@ -285,6 +230,8 @@
+@@ -285,6 +228,8 @@
  	if (!card)
  		return;
  
@@ -1042,7 +1155,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  	adapter = card->adapter;
  	if (!adapter || !adapter->priv_num)
  		return;
-@@ -292,9 +239,6 @@
+@@ -292,9 +237,6 @@
  	mwifiex_dbg(adapter, INFO, "info: SDIO func num=%d\n", func->num);
  
  	if (user_rmmod && !adapter->mfg_mode) {
@@ -1052,7 +1165,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  		mwifiex_deauthenticate_all(adapter);
  
  		priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
-@@ -302,7 +246,7 @@
+@@ -302,7 +244,7 @@
  		mwifiex_init_shutdown_fw(priv, MWIFIEX_FUNC_SHUTDOWN);
  	}
  
@@ -1061,7 +1174,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  }
  
  /*
-@@ -323,35 +267,32 @@
+@@ -323,40 +265,38 @@
  	mmc_pm_flag_t pm_flag = 0;
  	int ret = 0;
  
@@ -1116,7 +1229,30 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  	/* Enable the Host Sleep */
  	if (!mwifiex_enable_hs(adapter)) {
  		mwifiex_dbg(adapter, ERROR,
-@@ -2066,6 +2007,7 @@
+ 			    "cmd: failed to suspend\n");
+ 		adapter->hs_enabling = false;
++		mwifiex_disable_wake(adapter);
+ 		return -EFAULT;
+ 	}
+ 
+@@ -1195,7 +1135,6 @@
+ {
+ 	u32 total_pkt_len, pkt_len;
+ 	struct sk_buff *skb_deaggr;
+-	u32 pkt_type;
+ 	u16 blk_size;
+ 	u8 blk_num;
+ 	u8 *data;
+@@ -1216,8 +1155,6 @@
+ 			break;
+ 		}
+ 		pkt_len = le16_to_cpu(*(__le16 *)(data + SDIO_HEADER_OFFSET));
+-		pkt_type = le16_to_cpu(*(__le16 *)(data + SDIO_HEADER_OFFSET +
+-					 2));
+ 		if ((pkt_len + SDIO_HEADER_OFFSET) > blk_size) {
+ 			mwifiex_dbg(adapter, ERROR,
+ 				    "%s: error in pkt_len,\t"
+@@ -2066,6 +2003,7 @@
  	struct sdio_mmc_card *card = adapter->card;
  
  	if (adapter->card) {
@@ -1124,7 +1260,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  		sdio_claim_host(card->func);
  		sdio_disable_func(card->func);
  		sdio_release_host(card->func);
-@@ -2098,9 +2040,6 @@
+@@ -2098,9 +2036,6 @@
  		return ret;
  	}
  
@@ -1134,7 +1270,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  	strcpy(adapter->fw_name, card->firmware);
  	if (card->fw_dump_enh) {
  		adapter->mem_type_mapping_tbl = generic_mem_type_map;
-@@ -2240,8 +2179,6 @@
+@@ -2240,8 +2175,6 @@
  	kfree(card->mpa_rx.len_arr);
  	kfree(card->mpa_tx.buf);
  	kfree(card->mpa_rx.buf);
@@ -1143,7 +1279,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  }
  
  /*
-@@ -2291,6 +2228,14 @@
+@@ -2291,6 +2224,14 @@
  
  	mwifiex_sdio_remove(func);
  
@@ -1158,7 +1294,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  	/* power cycle the adapter */
  	sdio_claim_host(func);
  	mmc_hw_reset(func->card->host);
-@@ -2767,14 +2712,11 @@
+@@ -2767,14 +2708,11 @@
  /*
   * This function initializes the SDIO driver.
   *
@@ -1174,7 +1310,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  	/* Clear the flag in case user removes the card. */
  	user_rmmod = 0;
  
-@@ -2793,9 +2735,6 @@
+@@ -2793,9 +2731,6 @@
  static void
  mwifiex_sdio_cleanup_module(void)
  {
@@ -1184,8 +1320,8 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.c wireless-dri
  	/* Set the flag as user is removing this module. */
  	user_rmmod = 1;
  	cancel_work_sync(&sdio_work);
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.h
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.h	2016-11-20 21:52:19.000000000 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/sdio.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.h
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/sdio.h	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sdio.h	2016-11-21 02:49:23.740594090 +0000
 @@ -21,6 +21,7 @@
  #define	_MWIFIEX_SDIO_H
@@ -1218,9 +1354,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sdio.h wireless-dri
  	const char *firmware;
  	const struct mwifiex_sdio_card_reg *reg;
  	u8 max_ports;
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sta_cmd.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sta_cmd.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sta_cmd.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sta_cmd.c	2016-11-21 02:49:23.740594090 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/sta_cmd.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sta_cmd.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/sta_cmd.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/sta_cmd.c	2016-11-29 23:55:28.715384929 +0000
 @@ -368,7 +368,10 @@
  {
  	struct mwifiex_adapter *adapter = priv->adapter;
@@ -1279,7 +1415,70 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sta_cmd.c wireless-
  
  	return 0;
  }
-@@ -2218,9 +2235,7 @@
+@@ -1729,7 +1746,6 @@
+ {
+ 	struct host_cmd_ds_tdls_oper *tdls_oper = &cmd->params.tdls_oper;
+ 	struct mwifiex_ds_tdls_oper *oper = data_buf;
+-	struct mwifiex_sta_node *sta_ptr;
+ 	struct host_cmd_tlv_rates *tlv_rates;
+ 	struct mwifiex_ie_types_htcap *ht_capab;
+ 	struct mwifiex_ie_types_qos_info *wmm_qos_info;
+@@ -1747,7 +1763,6 @@
+ 
+ 	tdls_oper->reason = 0;
+ 	memcpy(tdls_oper->peer_mac, oper->peer_mac, ETH_ALEN);
+-	sta_ptr = mwifiex_get_sta_entry(priv, oper->peer_mac);
+ 
+ 	pos = (u8 *)tdls_oper + sizeof(struct host_cmd_ds_tdls_oper);
+ 
+@@ -1885,6 +1900,24 @@
+ 	return 0;
+ }
+ 
++/* This function check if the command is supported by firmware */
++static int mwifiex_is_cmd_supported(struct mwifiex_private *priv, u16 cmd_no)
++{
++	if (!ISSUPP_ADHOC_ENABLED(priv->adapter->fw_cap_info)) {
++		switch (cmd_no) {
++		case HostCmd_CMD_802_11_IBSS_COALESCING_STATUS:
++		case HostCmd_CMD_802_11_AD_HOC_START:
++		case HostCmd_CMD_802_11_AD_HOC_JOIN:
++		case HostCmd_CMD_802_11_AD_HOC_STOP:
++			return -EOPNOTSUPP;
++		default:
++			break;
++		}
++	}
++
++	return 0;
++}
++
+ /*
+  * This function prepares the commands before sending them to the firmware.
+  *
+@@ -1898,6 +1931,13 @@
+ 	struct host_cmd_ds_command *cmd_ptr = cmd_buf;
+ 	int ret = 0;
+ 
++	if (mwifiex_is_cmd_supported(priv, cmd_no)) {
++		mwifiex_dbg(priv->adapter, ERROR,
++			    "0x%x command not supported by firmware\n",
++			    cmd_no);
++			return -EOPNOTSUPP;
++		}
++
+ 	/* Prepare command */
+ 	switch (cmd_no) {
+ 	case HostCmd_CMD_GET_HW_SPEC:
+@@ -2191,7 +2231,6 @@
+ {
+ 	struct mwifiex_adapter *adapter = priv->adapter;
+ 	int ret;
+-	u16 enable = true;
+ 	struct mwifiex_ds_11n_amsdu_aggr_ctrl amsdu_aggr_ctrl;
+ 	struct mwifiex_ds_auto_ds auto_ds;
+ 	enum state_11d_t state_11d;
+@@ -2218,9 +2257,7 @@
  		 * The cal-data can be read from device tree and/or
  		 * a configuration file and downloaded to firmware.
  		 */
@@ -1290,7 +1489,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sta_cmd.c wireless-
  			if (of_property_read_u32(adapter->dt_node,
  						 "marvell,wakeup-pin",
  						 &data) == 0) {
-@@ -2228,19 +2243,13 @@
+@@ -2228,19 +2265,13 @@
  				adapter->hs_cfg.gpio = data;
  			}
  
@@ -1315,8 +1514,25 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/sta_cmd.c wireless-
  
  		/* Read MAC address from HW */
  		ret = mwifiex_send_cmd(priv, HostCmd_CMD_GET_HW_SPEC,
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/uap_cmd.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/uap_cmd.c	2016-11-20 21:52:19.000000000 +0000
+@@ -2312,16 +2343,6 @@
+ 	if (ret)
+ 		return -1;
+ 
+-	if (priv->bss_type == MWIFIEX_BSS_TYPE_STA) {
+-		/* set ibss coalescing_status */
+-		ret = mwifiex_send_cmd(
+-				priv,
+-				HostCmd_CMD_802_11_IBSS_COALESCING_STATUS,
+-				HostCmd_ACT_GEN_SET, 0, &enable, true);
+-		if (ret)
+-			return -1;
+-	}
+-
+ 	memset(&amsdu_aggr_ctrl, 0, sizeof(amsdu_aggr_ctrl));
+ 	amsdu_aggr_ctrl.enable = true;
+ 	/* Send request to firmware */
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/uap_cmd.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/uap_cmd.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/uap_cmd.c	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/uap_cmd.c	2016-11-16 04:01:36.559107318 +0000
 @@ -404,7 +404,7 @@
  		       struct cfg80211_ap_settings *params)
@@ -1340,9 +1556,9 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/uap_cmd.c wireless-
  		priv->wmm_enabled = 1;
  	} else {
  		memset(&bss_cfg->wmm_info, 0, sizeof(bss_cfg->wmm_info));
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c	2016-11-20 21:52:19.000000000 +0000
-+++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.c	2016-11-21 02:49:23.740594090 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/usb.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/usb.c	2016-11-27 21:08:04.000000000 +0000
++++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.c	2016-11-29 23:55:28.715384929 +0000
 @@ -24,7 +24,6 @@
  
  static u8 user_rmmod;
@@ -1351,9 +1567,12 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  
  static struct usb_device_id mwifiex_usb_table[] = {
  	/* 8766 */
-@@ -382,10 +381,12 @@
+@@ -380,16 +379,17 @@
+ 	struct usb_endpoint_descriptor *epd;
+ 	int ret, i;
  	struct usb_card_rec *card;
- 	u16 id_vendor, id_product, bcd_device, bcd_usb;
+-	u16 id_vendor, id_product, bcd_device, bcd_usb;
++	u16 id_vendor, id_product, bcd_device;
  
 -	card = kzalloc(sizeof(struct usb_card_rec), GFP_KERNEL);
 +	card = devm_kzalloc(&intf->dev, sizeof(*card), GFP_KERNEL);
@@ -1365,7 +1584,11 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  	id_vendor = le16_to_cpu(udev->descriptor.idVendor);
  	id_product = le16_to_cpu(udev->descriptor.idProduct);
  	bcd_device = le16_to_cpu(udev->descriptor.bcdDevice);
-@@ -475,12 +476,11 @@
+-	bcd_usb = le16_to_cpu(udev->descriptor.bcdUSB);
+ 	pr_debug("info: VID/PID = %X/%X, Boot2 version = %X\n",
+ 		 id_vendor, id_product, bcd_device);
+ 
+@@ -475,12 +475,11 @@
  
  	usb_set_intfdata(intf, card);
  
@@ -1380,7 +1603,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  		return ret;
  	}
  
-@@ -503,17 +503,27 @@
+@@ -503,17 +502,27 @@
  	struct usb_tx_data_port *port;
  	int i, j;
  
@@ -1412,7 +1635,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  
  	/* 'is_suspended' flag indicates device is suspended.
  	 * It must be set here before the usb_kill_urb() calls. Reason
-@@ -559,8 +569,9 @@
+@@ -559,8 +568,9 @@
  	struct mwifiex_adapter *adapter;
  	int i;
  
@@ -1424,7 +1647,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  		return 0;
  	}
  	adapter = card->adapter;
-@@ -602,21 +613,13 @@
+@@ -602,21 +612,13 @@
  	struct usb_card_rec *card = usb_get_intfdata(intf);
  	struct mwifiex_adapter *adapter;
  
@@ -1448,7 +1671,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  		mwifiex_deauthenticate_all(adapter);
  
  		mwifiex_init_shutdown_fw(mwifiex_get_priv(adapter,
-@@ -628,13 +631,9 @@
+@@ -628,13 +630,9 @@
  
  	mwifiex_dbg(adapter, FATAL,
  		    "%s: removing card\n", __func__);
@@ -1463,7 +1686,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  }
  
  static struct usb_driver mwifiex_usb_driver = {
-@@ -932,7 +931,6 @@
+@@ -932,7 +930,6 @@
  	struct usb_card_rec *card = (struct usb_card_rec *)adapter->card;
  
  	card->adapter = adapter;
@@ -1471,7 +1694,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  
  	switch (le16_to_cpu(card->udev->descriptor.idProduct)) {
  	case USB8997_PID_1:
-@@ -1206,8 +1204,7 @@
+@@ -1206,8 +1203,7 @@
  
  /* This function initializes the USB driver module.
   *
@@ -1481,7 +1704,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
   */
  static int mwifiex_usb_init_module(void)
  {
-@@ -1215,8 +1212,6 @@
+@@ -1215,8 +1211,6 @@
  
  	pr_debug("Marvell USB8797 Driver\n");
  
@@ -1490,7 +1713,7 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  	ret = usb_register(&mwifiex_usb_driver);
  	if (ret)
  		pr_err("Driver register failed!\n");
-@@ -1236,9 +1231,6 @@
+@@ -1236,9 +1230,6 @@
   */
  static void mwifiex_usb_cleanup_module(void)
  {
@@ -1500,8 +1723,8 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.c wireless-driv
  	/* set the flag as user is removing this module */
  	user_rmmod = 1;
  
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.h
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.h	2016-11-20 21:52:19.000000000 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/usb.h wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.h
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/usb.h	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/usb.h	2016-11-21 02:49:23.740594090 +0000
 @@ -20,6 +20,7 @@
  #ifndef _MWIFIEX_USB_H
@@ -1519,8 +1742,8 @@ diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/usb.h wireless-driv
  	u8 rx_cmd_ep;
  	struct urb_context rx_cmd;
  	atomic_t rx_cmd_urb_pending;
-diff -urN linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/wmm.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/wmm.c
---- linux-4.9-rc6/drivers/net/wireless/marvell/mwifiex/wmm.c	2016-11-20 21:52:19.000000000 +0000
+diff -urN linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/wmm.c wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/wmm.c
+--- linux-4.9-rc7/drivers/net/wireless/marvell/mwifiex/wmm.c	2016-11-27 21:08:04.000000000 +0000
 +++ wireless-drivers-next/drivers/net/wireless/marvell/mwifiex/wmm.c	2016-11-16 04:01:36.559107318 +0000
 @@ -503,8 +503,10 @@
  	struct mwifiex_adapter *adapter = priv->adapter;

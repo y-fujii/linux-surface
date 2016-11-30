@@ -3,8 +3,8 @@
 # Maintainer: Thomas Baechler <thomas@archlinux.org>
 
 pkgbase=linux-surface
-_srcname=linux-4.9-rc6
-pkgver=4.9rc6
+_srcname=linux-4.9-rc7
+pkgver=4.9rc7
 pkgrel=1
 arch=('i686' 'x86_64')
 url="http://www.kernel.org/"
