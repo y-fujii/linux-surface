@@ -1,11 +1,11 @@
-# Id: PKGBUILD 277473 2016-09-30 19:28:40Z tpowa $
+# $Id$
 # Maintainer: Tobias Powalowski <tpowa@archlinux.org>
 # Maintainer: Thomas Baechler <thomas@archlinux.org>
 
 #pkgbase=linux              # Build stock -ARCH kernel
 pkgbase=linux-surface       # Build kernel with a different name
-_srcname=linux-4.9
-pkgver=4.9.3
+_srcname=linux-4.10
+pkgver=4.10.1
 pkgrel=1
 arch=('i686' 'x86_64')
 url="https://www.kernel.org/"
@@ -17,29 +17,26 @@ source=("https://www.kernel.org/pub/linux/kernel/v4.x/${_srcname}.tar.xz"
         "https://www.kernel.org/pub/linux/kernel/v4.x/patch-${pkgver}.xz"
         "https://www.kernel.org/pub/linux/kernel/v4.x/patch-${pkgver}.sign"
         # the main kernel config files
-        'config' 'config.x86_64'
+        'config.i686' 'config.x86_64'
         # pacman hook for initramfs regeneration
         '99-linux.hook'
         # standard config files for mkinitcpio ramdisk
         'linux.preset'
-        'change-default-console-loglevel.patch'
-        0001-x86-fpu-Fix-invalid-FPU-ptrace-state-after-execve.patch
         'mwifiex.patch'
         'multitouch.patch'
         )
 
-sha256sums=('029098dcffab74875e086ae970e3828456838da6e0ba22ce3f64ef764f3d7f1a'
+sha256sums=('3c95d9f049bd085e5c346d2c77f063b8425f191460fcd3ae9fe7e94e0477dc4b'
             'SKIP'
-            '4465c0367becfdec0cd4ce3eb7e0f07e1bb1033bc26d49f08489a95596c782f6'
+            'da560125aa350f76f0e4a5b9373a0d0a1c27ccefe3b7bd9231724f3a3c4ebb9e'
             'SKIP'
-            '7ac7f28fce30becc44d975387b7299ac4a0150312de2279ac560ee4429689b0c'
-            '6216595abd0426bdf2e07e2f17a7c7ad973b79b16d6d11e565d92ef44e81e5da'
+            '386051f19482672c871e7865fc62f5e2c8010d857729134ba13044734962e42c'
+            '12a87284e2935cd17e2846a207cc76f1728531416523735d66ef8a0ae690884c'
             '834bd254b56ab71d73f59b3221f056c72f559553c04718e350ab2a3e2991afe0'
             'ad6344badc91ad0630caacde83f7f9b97276f80d26a20619a87952be65492c65'
-            '1256b241cd477b265a3c2d64bdc19ffe3c9bbcee82ea3994c590c2c76e767d99'
-            '3e955e0f1aae96bb6c1507236adc952640c9bd0a134b9995ab92106a33dc02d9'
             'SKIP'
-            'SKIP')
+            'SKIP'
+            )
 validpgpkeys=(
               'ABAF11C65A2970B130ABE3C479BE3E4300411886' # Linus Torvalds
               '647F28654894E3BD457199BE38DBBDC86092693E' # Greg Kroah-Hartman
@@ -53,28 +50,14 @@ prepare() {
   # add upstream patch
   patch -p1 -i "${srcdir}/patch-${pkgver}"
 
-  # Revert a commit that causes memory corruption in i686 chroots on our
-  # build server ("valgrind bash" immediately crashes)
-  # https://bugzilla.kernel.org/show_bug.cgi?id=190061
-  patch -Rp1 -i "${srcdir}/0001-x86-fpu-Fix-invalid-FPU-ptrace-state-after-execve.patch"
-
   # add latest fixes from stable queue, if needed
   # http://git.kernel.org/?p=linux/kernel/git/stable/stable-queue.git
 
-  # the patches for Surface
+  # patches for Surface Pro 3/4.
   patch -p1 -i "${srcdir}/mwifiex.patch"
   patch -p1 -i "${srcdir}/multitouch.patch"
 
-  # set DEFAULT_CONSOLE_LOGLEVEL to 4 (same value as the 'quiet' kernel param)
-  # remove this when a Kconfig knob is made available by upstream
-  # (relevant patch sent upstream: https://lkml.org/lkml/2011/7/26/227)
-  patch -p1 -i "${srcdir}/change-default-console-loglevel.patch"
-
-  if [ "${CARCH}" = "x86_64" ]; then
-    cat "${srcdir}/config.x86_64" > ./.config
-  else
-    cat "${srcdir}/config" > ./.config
-  fi
+  cat "${srcdir}/config.${CARCH}" > ./.config
 
   if [ "${_kernelname}" != "" ]; then
     sed -i "s|CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"${_kernelname}\"|g" ./.config

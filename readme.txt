@@ -1,8 +1,10 @@
 The Arch Linux package of the Linux kernel and modules with several patches for
-Microsoft Surface (Pro).
+Microsoft Surface Pro 3/4/Book.
 
 	- Make Type Cover mutitouch enabled.
-	- Fix Wi-Fi freezing (from <https://bugzilla.kernel.org/show_bug.cgi?id=188351>).
+		the same way as <https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=8fe89ef076fa104f514da6ef61d90f5bf93488e3>
+	- Fix Wi-Fi freezing.
+		from linux-next.  see also <https://bugzilla.kernel.org/show_bug.cgi?id=188351>.
 
 There are two ways to enable both touch panel and pen:
 
